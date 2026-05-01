@@ -95,6 +95,15 @@ async function submitTicket(body) {
 async function listTickets(query) {
   const { status, priority, type, search, page, limit, sort, order } = query;
 
+  // Map API sort fields (snake_case) → Prisma model fields (camelCase)
+  const sortFieldMap = {
+    received_at:  'receivedAt',
+    processed_at: 'processedAt',
+    ticket_key:   'ticketKey',
+    status:       'status',
+  };
+  const prismaSort = sortFieldMap[sort] || 'receivedAt';
+
   // Build Prisma where clause
   const where = {};
 
@@ -124,7 +133,7 @@ async function listTickets(query) {
     prisma.ticket.count({ where }),
     prisma.ticket.findMany({
       where,
-      orderBy: { [sort]: order },
+      orderBy: { [prismaSort]: order },
       skip: (page - 1) * limit,
       take: limit,
       select: {
