@@ -1,0 +1,42 @@
+import os
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from api.analyse import router as analyse_router
+from api.stream import router as stream_router
+from api.webhook import router as webhook_router
+from prompt_loader import seed_prompts_from_json
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        seed_prompts_from_json()
+    except Exception:
+        pass
+    yield
+
+
+app = FastAPI(title="SAGE", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(analyse_router, tags=["analyse"])
+app.include_router(stream_router, tags=["stream"])
+app.include_router(webhook_router, tags=["webhook"])
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "sage"}

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+psycopg2-binary
+openai
+requests
+langgraph
+pydantic
+sse-starlette
+python-dotenv
+pytest
