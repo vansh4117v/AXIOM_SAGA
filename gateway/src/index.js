@@ -3,13 +3,14 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const path = require('path');
+const passport = require('passport');
 const logger = require('./utils/logger');
-const db = require('./utils/db');
+const { prisma, healthCheck: dbHealthCheck, disconnect: dbDisconnect } = require('./utils/prisma');
 const requestId = require('./middleware/requestId');
 const { createRateLimiter } = require('./middleware/rateLimiter');
 const errorHandler = require('./middleware/errorHandler');
 const { authenticate, authorize } = require('./middleware/auth');
+const { configurePassport } = require('./middleware/passport');
 const { startPolling, stopPolling, getStatus: getPollerStatus, triggerManualPoll } = require('./services/jiraPoller');
 const { getInstance: getDeduplicator, destroyInstance: destroyDeduplicator } = require('./services/deduplicator');
 const { writeCommentToJira } = require('./services/jiraWriter');
@@ -22,10 +23,12 @@ const promptRoutes = require('./routes/prompts');
 const app = express();
 const PORT = process.env.GATEWAY_PORT || 3001;
 
+
 app.use(helmet({
-  contentSecurityPolicy: false, // Allow dashboard to load resources
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
 }));
+
 
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
@@ -39,22 +42,28 @@ app.use(cors({
   exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'Retry-After'],
 }));
 
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
+
+app.use(passport.initialize());
+configurePassport();
+
+
 app.use(requestId);
+
 
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
     const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'debug';
-    logger[level](
-      `[${req.id}] ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`
-    );
+    logger[level](`[${req.id}] ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`);
   });
   next();
 });
+
 
 const globalRateLimiter = createRateLimiter({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10),
@@ -62,15 +71,14 @@ const globalRateLimiter = createRateLimiter({
 });
 app.use(globalRateLimiter);
 
+
 app.get('/health', async (_req, res) => {
-  const dbHealth = await db.healthCheck();
+  const dbHealth = await dbHealthCheck();
   const pollerStatus = getPollerStatus();
   const dedupStats = getDeduplicator().getStats();
 
-  const healthy = dbHealth.connected;
-
-  res.status(healthy ? 200 : 503).json({
-    status: healthy ? 'ok' : 'degraded',
+  res.status(dbHealth.connected ? 200 : 503).json({
+    status: dbHealth.connected ? 'ok' : 'degraded',
     service: 'sage-gateway',
     version: require('../package.json').version,
     uptime: Math.floor(process.uptime()),
@@ -89,10 +97,13 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+
 app.use('/auth', authRoutes);
+
 
 app.use('/tickets', authenticate, ticketRoutes);
 app.use('/prompts', authenticate, promptRoutes);
+
 
 app.get('/admin/poller/status', authenticate, authorize('admin'), (_req, res) => {
   res.json(getPollerStatus());
@@ -102,9 +113,7 @@ app.post('/admin/poller/trigger', authenticate, authorize('admin'), async (_req,
   try {
     const result = await triggerManualPoll();
     res.json({ message: 'Manual poll triggered', result });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
 app.post('/admin/poller/stop', authenticate, authorize('admin'), (_req, res) => {
@@ -117,6 +126,7 @@ app.post('/admin/poller/start', authenticate, authorize('admin'), (_req, res) =>
   res.json({ message: 'Poller started' });
 });
 
+
 app.post('/callback/briefing', express.json(), async (req, res, next) => {
   try {
     const { ticket_key, briefing, run_id, trace_url } = req.body;
@@ -127,7 +137,6 @@ app.post('/callback/briefing', express.json(), async (req, res, next) => {
       });
     }
 
-    // Write comment to Jira
     const dashboardUrl = trace_url
       || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/briefing/${run_id}`;
 
@@ -135,48 +144,40 @@ app.post('/callback/briefing', express.json(), async (req, res, next) => {
       await writeCommentToJira(ticket_key, briefing, dashboardUrl);
     } catch (writeErr) {
       logger.error(`Jira write-back failed for ${ticket_key}: ${writeErr.message}`);
-      // Don't fail the callback — still update ticket status
     }
 
-    // Update ticket status
-    await db.query(
-      "UPDATE tickets SET status = 'complete', processed_at = NOW() WHERE ticket_key = $1",
-      [ticket_key]
-    );
+    await prisma.ticket.update({
+      where: { ticketKey: ticket_key },
+      data: { status: 'complete', processedAt: new Date() },
+    }).catch(() => {});
 
-    // Update dedup cache
     getDeduplicator().updateStatus(ticket_key, 'complete');
 
     logger.info(`Briefing callback: ${ticket_key} complete`);
     return res.json({ status: 'ok', ticket_key });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
+
 app.use((_req, res) => {
-  res.status(404).json({
-    error: { code: 'NOT_FOUND', message: 'Endpoint not found' },
-  });
+  res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } });
 });
+
 
 app.use(errorHandler);
 
+
 async function start() {
   try {
-    // Initialise database pool
-    db.initPool(process.env.DATABASE_URL, {
-      poolMax: parseInt(process.env.DB_POOL_MAX || '20', 10),
-      idleTimeout: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
-      connectionTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT || '5000', 10),
-      ssl: process.env.DB_SSL === 'true',
-    });
+    // Test DB connection
+    const dbCheck = await dbHealthCheck();
+    if (dbCheck.connected) {
+      logger.info(`Database connected (${dbCheck.latencyMs}ms)`);
+    } else {
+      logger.warn(`Database not available: ${dbCheck.reason}`);
+    }
 
-    // Run migrations
-    const migrationsDir = path.resolve(__dirname, 'db/migrations');
-    await db.runMigrations(migrationsDir);
-
-    // Initialise deduplicator
+    // Init deduplicator
     getDeduplicator({
       maxSize: parseInt(process.env.DEDUP_MAX_SIZE || '10000', 10),
       ttlMs: parseInt(process.env.DEDUP_TTL_MS || String(60 * 60 * 1000), 10),
@@ -186,26 +187,22 @@ async function start() {
     const server = app.listen(PORT, () => {
       logger.info(`SAGE Gateway running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-
-      // Start Jira polling
       startPolling(process.env.JIRA_POLL_CRON || '*/1 * * * *');
     });
 
     // Graceful shutdown
     const shutdown = async (signal) => {
       logger.info(`${signal} received — shutting down gracefully`);
-
       stopPolling();
       destroyDeduplicator();
       globalRateLimiter.destroy();
 
       server.close(async () => {
-        await db.close();
+        await dbDisconnect();
         logger.info('Gateway shut down complete');
         process.exit(0);
       });
 
-      // Force exit after 10s
       setTimeout(() => {
         logger.error('Forced shutdown after timeout');
         process.exit(1);
@@ -214,17 +211,11 @@ async function start() {
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
-
-    // Catch unhandled rejections
-    process.on('unhandledRejection', (reason) => {
-      logger.error(`Unhandled rejection: ${reason}`);
-    });
-
+    process.on('unhandledRejection', (reason) => logger.error(`Unhandled rejection: ${reason}`));
     process.on('uncaughtException', (err) => {
       logger.error(`Uncaught exception: ${err.message}`, { stack: err.stack });
       process.exit(1);
     });
-
   } catch (err) {
     logger.error(`Failed to start gateway: ${err.message}`, { stack: err.stack });
     process.exit(1);
