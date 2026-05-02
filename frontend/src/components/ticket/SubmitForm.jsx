@@ -27,7 +27,7 @@ export default function SubmitForm({ onSubmitted }) {
     try {
       const dto = {
         ticket_id: form.ticket_key,
-        ticket_key: form.ticket_key,
+        ticket_key: `${form.ticket_key}-${Date.now()}`,
         ticket_summary: form.ticket_summary,
         ticket_description: form.ticket_description,
         ticket_priority: form.ticket_priority,
