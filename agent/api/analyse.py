@@ -3,7 +3,7 @@ import json
 import asyncio
 from functools import partial
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from models.ticket import TicketDTO
 from db.connection import get_connection
@@ -18,6 +18,10 @@ def _run_pipeline_sync(ticket: TicketDTO, run_id: str) -> None:
 
 @router.post("/analyse")
 async def analyse_ticket(ticket: TicketDTO):
+    if not ticket.ticket_key or not ticket.ticket_key.strip():
+        raise HTTPException(status_code=422, detail="ticket_key is required")
+    if not ticket.ticket_summary or not ticket.ticket_summary.strip():
+        raise HTTPException(status_code=422, detail="ticket_summary is required")
     run_id = str(uuid.uuid4())
 
     with get_connection() as conn:

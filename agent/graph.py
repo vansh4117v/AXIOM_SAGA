@@ -1,4 +1,5 @@
 import json
+import concurrent.futures
 from langgraph.graph import StateGraph, END
 
 from models.scratchpad import AgentScratchpad
@@ -11,6 +12,7 @@ from agents.orchestrator import (
     should_run_explainer,
     should_run_risk_late,
 )
+from agents.embed_guard import ensure_repos_embedded
 from agents.context_agent import run_context_agent
 from agents.routing_agent import run_routing_agent
 from agents.explainer_agent import run_explainer_agent
@@ -19,10 +21,13 @@ from agents.synthesis import run_synthesis
 from db.connection import get_connection
 from sse_writer import push_sse_event
 
+PIPELINE_TIMEOUT_SECONDS = 120
+
 
 def build_graph():
     graph = StateGraph(AgentScratchpad)
 
+    graph.add_node("ensure_embeddings", ensure_repos_embedded)
     graph.add_node("orchestrator", classify_and_plan)
     graph.add_node("context_agent", run_context_agent)
     graph.add_node("routing_agent", run_routing_agent)
@@ -34,7 +39,8 @@ def build_graph():
     graph.add_node("explainer_check", lambda s: s)
     graph.add_node("risk_late_check", lambda s: s)
 
-    graph.set_entry_point("orchestrator")
+    graph.set_entry_point("ensure_embeddings")
+    graph.add_edge("ensure_embeddings", "orchestrator")
 
     graph.add_conditional_edges(
         "orchestrator",
@@ -116,7 +122,19 @@ def run_sage_pipeline(ticket: TicketDTO, run_id: str) -> dict:
 
     graph = get_graph()
     try:
-        result = graph.invoke(initial_state)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(graph.invoke, initial_state)
+            result = future.result(timeout=PIPELINE_TIMEOUT_SECONDS)
+    except concurrent.futures.TimeoutError:
+        print(f"[pipeline] TIMEOUT after {PIPELINE_TIMEOUT_SECONDS}s")
+        push_sse_event(run_id, "pipeline_failed", {"error": f"Pipeline timeout after {PIPELINE_TIMEOUT_SECONDS}s"})
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE tickets SET status = 'timeout' WHERE ticket_key = %s",
+                    (ticket.ticket_key,),
+                )
+        return initial_state
     except Exception as e:
         print(f"[pipeline] FATAL: {e}")
         push_sse_event(run_id, "pipeline_failed", {"error": str(e)})

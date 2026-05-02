@@ -16,13 +16,26 @@ load_dotenv()
 from api.analyse import router as analyse_router
 from api.stream import router as stream_router
 from api.webhook import router as webhook_router
+from api.data import router as data_router
 from prompt_loader import seed_prompts_from_json
+from db.seed_team import seed_team_if_empty
+from agents.embed_guard import startup_embed
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         seed_prompts_from_json()
+    except Exception:
+        pass
+    try:
+        seed_team_if_empty()
+    except Exception:
+        pass
+    try:
+        import threading
+        t = threading.Thread(target=startup_embed, daemon=True)
+        t.start()
     except Exception:
         pass
     yield
@@ -41,6 +54,7 @@ app.add_middleware(
 app.include_router(analyse_router, tags=["analyse"])
 app.include_router(stream_router, tags=["stream"])
 app.include_router(webhook_router, tags=["webhook"])
+app.include_router(data_router, tags=["data"])
 
 
 @app.get("/health")

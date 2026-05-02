@@ -2,7 +2,6 @@ fastapi
 uvicorn[standard]
 psycopg2-binary
 groq
-sentence-transformers
 requests
 langgraph
 pydantic

@@ -96,8 +96,10 @@ def run_synthesis(state: AgentScratchpad) -> AgentScratchpad:
     try:
         trace_url = f"/briefing/{run_id}"
         write_comment(state["ticket_key"], briefing, trace_url)
+        push_sse_event(run_id, "jira_commented", {"ticket_key": state["ticket_key"]})
     except Exception as e:
         print(f"[synthesis] Jira write-back failed: {e}")
+        push_sse_event(run_id, "jira_writeback_failed", {"ticket_key": state["ticket_key"], "error": str(e)})
 
     duration_ms = int((time.monotonic() - started) * 1000)
 

@@ -198,16 +198,26 @@ def run_context_agent(state: AgentScratchpad) -> AgentScratchpad:
     state["related_prs"] = all_prs
     state["related_tickets"] = all_related_tickets
     state["context_confidence"] = confidence
-    state["context_retry_count"] = state.get("context_retry_count", 0) + 1
+    retry_count = state.get("context_retry_count", 0) + 1
+    state["context_retry_count"] = retry_count
+
+    # If no files found at all, force confidence above threshold to prevent
+    # useless retries (embeddings are simply missing or query has no matches)
+    if len(unique_files) == 0 and retry_count >= 1:
+        state["context_confidence"] = 0.99
+
+    reasoning = f"retry_count={retry_count}"
+    if len(unique_files) == 0:
+        reasoning += ", no embeddings matched - skipping further retries"
 
     state["agent_trace"].append({
         "agent": "context_agent",
         "started_at": datetime.now(timezone.utc).isoformat(),
         "duration_ms": duration_ms,
         "tools_called": tools_called,
-        "confidence": confidence,
+        "confidence": confidence if unique_files else 0.0,
         "decision_made": f"found {len(unique_files)} files, confidence={confidence}",
-        "reasoning": f"retry_count={state['context_retry_count']}",
+        "reasoning": reasoning,
     })
 
     push_sse_event(run_id, "agent_complete", {
