@@ -34,6 +34,11 @@ async function submitTicket(body) {
     );
   }
 
+  // Validate ticket_key format
+  if (!dto.ticket_key || !/^[A-Z]+-\d+$/.test(dto.ticket_key)) {
+    throw new ValidationError('ticket_key must match format: PROJECT-123');
+  }
+
   // Dedup check
   const dedup = getDeduplicator();
   if (await dedup.isDuplicate(dto.ticket_key)) {
