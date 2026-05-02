@@ -65,7 +65,7 @@ def run_risk_agent(state: AgentScratchpad) -> AgentScratchpad:
 
     while True:
         response = _get_client().chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             max_tokens=1500,
             tools=TOOLS,
             messages=messages,

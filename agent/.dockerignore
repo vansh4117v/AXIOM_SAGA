@@ -11,6 +11,5 @@ node_modules
 *.png
 *.jpg
 data
-models
 .cache
 .pytest_cache

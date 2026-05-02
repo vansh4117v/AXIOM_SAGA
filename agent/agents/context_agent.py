@@ -138,7 +138,7 @@ def run_context_agent(state: AgentScratchpad) -> AgentScratchpad:
 
     while True:
         response = _get_client().chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             max_tokens=2000,
             tools=TOOLS,
             messages=messages,
@@ -183,6 +183,26 @@ def run_context_agent(state: AgentScratchpad) -> AgentScratchpad:
                     "tool_call_id": tc.id,
                     "content": result_str,
                 })
+
+    # Hard fallback: if LLM stopped without calling any tools, force one search
+    if not tools_called:
+        fallback_query = state.get("ticket_summary", "")[:100]
+        push_sse_event(run_id, "tool_called", {
+            "agent": "context_agent",
+            "tool": "search_codebase",
+            "input_summary": f"(fallback) {fallback_query}",
+        })
+        try:
+            fallback_results = search_codebase(fallback_query, top_k=5)
+            fallback_results = validate_file_paths(fallback_results)
+            all_files.extend(fallback_results)
+            tools_called.append({
+                "tool": "search_codebase",
+                "input": {"query": fallback_query},
+                "fallback": True
+            })
+        except Exception as e:
+            print(f"[context_agent] fallback search failed: {e}")
 
     seen_paths = set()
     unique_files = []

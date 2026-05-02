@@ -9,3 +9,4 @@ sse-starlette
 python-dotenv
 tenacity
 pytest
+fastembed==0.2.7
