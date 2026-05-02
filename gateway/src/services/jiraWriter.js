@@ -1,5 +1,5 @@
-const axios = require('axios');
-const logger = require('../utils/logger');
+const axios = require("axios");
+const logger = require("../utils/logger");
 
 /**
  * Retry an async function with exponential backoff.
@@ -11,12 +11,10 @@ const logger = require('../utils/logger');
  * @param {Function} opts.shouldRetry   — predicate: (error) => boolean
  * @returns {Promise<*>}
  */
-async function withRetry(fn, {
-  maxRetries = 3,
-  baseDelayMs = 1000,
-  maxDelayMs = 10000,
-  shouldRetry = () => true,
-} = {}) {
+async function withRetry(
+  fn,
+  { maxRetries = 3, baseDelayMs = 1000, maxDelayMs = 10000, shouldRetry = () => true } = {},
+) {
   let lastError;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -33,9 +31,9 @@ async function withRetry(fn, {
       const jitter = Math.floor(Math.random() * delay * 0.2); // ±20% jitter
       logger.warn(
         `Jira write-back retry ${attempt + 1}/${maxRetries}: ` +
-        `waiting ${delay + jitter}ms — ${err.message}`
+          `waiting ${delay + jitter}ms — ${err.message}`,
       );
-      await new Promise(resolve => setTimeout(resolve, delay + jitter));
+      await new Promise((resolve) => setTimeout(resolve, delay + jitter));
     }
   }
 
@@ -66,31 +64,33 @@ function buildADFComment(briefing, traceUrl) {
 
   const content = [
     {
-      type: 'heading',
+      type: "heading",
       attrs: { level: 3 },
-      content: [{
-        type: 'text',
-        text: `🤖 SAGE Analysis — confidence ${confidencePercent}%`,
-      }],
-    },
-
-    {
-      type: 'paragraph',
       content: [
-        { type: 'text', marks: [{ type: 'strong' }], text: 'Context: ' },
-        { type: 'text', text: briefing.context_summary || 'No context available' },
+        {
+          type: "text",
+          text: `🤖 SAGE Analysis — confidence ${confidencePercent}%`,
+        },
       ],
     },
 
     {
-      type: 'paragraph',
+      type: "paragraph",
       content: [
-        { type: 'text', marks: [{ type: 'strong' }], text: 'Owner: ' },
+        { type: "text", marks: [{ type: "strong" }], text: "Context: " },
+        { type: "text", text: briefing.context_summary || "No context available" },
+      ],
+    },
+
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", marks: [{ type: "strong" }], text: "Owner: " },
         {
-          type: 'text',
+          type: "text",
           text: briefing.primary_owner
             ? `${briefing.primary_owner.name} (${briefing.primary_owner.team})`
-            : 'Unassigned',
+            : "Unassigned",
         },
       ],
     },
@@ -98,60 +98,63 @@ function buildADFComment(briefing, traceUrl) {
 
   if (briefing.steps_summary) {
     content.push({
-      type: 'paragraph',
+      type: "paragraph",
       content: [
-        { type: 'text', marks: [{ type: 'strong' }], text: 'Suggested approach: ' },
-        { type: 'text', text: briefing.steps_summary },
+        { type: "text", marks: [{ type: "strong" }], text: "Suggested approach: " },
+        { type: "text", text: briefing.steps_summary },
       ],
     });
   }
 
   if (briefing.risk_summary) {
     content.push({
-      type: 'paragraph',
+      type: "paragraph",
       content: [
-        { type: 'text', marks: [{ type: 'strong' }], text: 'Risk: ' },
+        { type: "text", marks: [{ type: "strong" }], text: "Risk: " },
         {
-          type: 'text',
+          type: "text",
           text: briefing.risk_summary,
-          ...(briefing.overall_risk_level === 'critical' || briefing.overall_risk_level === 'high'
-            ? { marks: [{ type: 'strong' }, { type: 'textColor', attrs: { color: '#de350b' } }] }
-            : {}
-          ),
+          ...(briefing.overall_risk_level === "critical" || briefing.overall_risk_level === "high"
+            ? { marks: [{ type: "strong" }, { type: "textColor", attrs: { color: "#de350b" } }] }
+            : {}),
         },
       ],
     });
   }
 
-  const askMessage = briefing.suggested_question || briefing.ask_senior_message || '';
+  const askMessage = briefing.suggested_question || briefing.ask_senior_message || "";
   if (askMessage) {
     content.push({
-      type: 'blockquote',
-      content: [{
-        type: 'paragraph',
-        content: [
-          { type: 'text', marks: [{ type: 'strong' }], text: 'Ask senior: ' },
-          { type: 'hardBreak' },
-          { type: 'text', text: askMessage },
-        ],
-      }],
+      type: "blockquote",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", marks: [{ type: "strong" }], text: "Ask senior: " },
+            { type: "hardBreak" },
+            { type: "text", text: askMessage },
+          ],
+        },
+      ],
     });
   }
 
   if (traceUrl) {
     content.push({
-      type: 'paragraph',
-      content: [{
-        type: 'text',
-        marks: [{ type: 'link', attrs: { href: traceUrl } }],
-        text: '→ View full briefing in SAGE',
-      }],
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          marks: [{ type: "link", attrs: { href: traceUrl } }],
+          text: "→ View full briefing in SAGE",
+        },
+      ],
     });
   }
 
   return {
     body: {
-      type: 'doc',
+      type: "doc",
       version: 1,
       content,
     },
@@ -168,8 +171,8 @@ function buildADFComment(briefing, traceUrl) {
  * @returns {object|null}     — Jira API response data, or null if skipped
  */
 async function writeCommentToJira(ticketKey, briefing, traceUrl) {
-  const baseUrl  = process.env.JIRA_BASE_URL;
-  const email    = process.env.JIRA_EMAIL;
+  const baseUrl = process.env.JIRA_BASE_URL;
+  const email = process.env.JIRA_EMAIL;
   const apiToken = process.env.JIRA_API_TOKEN;
 
   if (!baseUrl || !email || !apiToken) {
@@ -177,7 +180,7 @@ async function writeCommentToJira(ticketKey, briefing, traceUrl) {
     return null;
   }
 
-  if (!briefing || typeof briefing !== 'object') {
+  if (!briefing || typeof briefing !== "object") {
     logger.error(`Jira write-back skipped for ${ticketKey} — invalid briefing object`);
     return null;
   }
@@ -192,10 +195,10 @@ async function writeCommentToJira(ticketKey, briefing, traceUrl) {
       const response = await axios.post(url, adfBody, {
         auth: { username: email, password: apiToken },
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
-        timeout: parseInt(process.env.JIRA_REQUEST_TIMEOUT || '15000', 10),
+        timeout: parseInt(process.env.JIRA_REQUEST_TIMEOUT || "15000", 10),
       });
       return response.data;
     },
@@ -203,7 +206,7 @@ async function writeCommentToJira(ticketKey, briefing, traceUrl) {
       maxRetries: 3,
       baseDelayMs: 1000,
       shouldRetry: isRetryableError,
-    }
+    },
   );
 
   const duration = Date.now() - start;

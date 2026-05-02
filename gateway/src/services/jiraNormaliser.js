@@ -1,4 +1,4 @@
-const logger = require('../utils/logger');
+const logger = require("../utils/logger");
 
 /**
  * Recursively extract plain text from Jira Atlassian Document Format (ADF).
@@ -6,8 +6,8 @@ const logger = require('../utils/logger');
  * code blocks, tables, inline nodes, media placeholders.
  */
 function extractPlainText(adf) {
-  if (!adf) return '';
-  if (typeof adf === 'string') return adf;
+  if (!adf) return "";
+  if (typeof adf === "string") return adf;
 
   const parts = [];
 
@@ -15,89 +15,89 @@ function extractPlainText(adf) {
     if (!node) return;
 
     switch (node.type) {
-      case 'text':
-        parts.push(node.text || '');
+      case "text":
+        parts.push(node.text || "");
         break;
 
-      case 'hardBreak':
-        parts.push('\n');
+      case "hardBreak":
+        parts.push("\n");
         break;
 
-      case 'paragraph':
-        if (parts.length > 0 && !parts[parts.length - 1].endsWith('\n')) {
-          parts.push('\n');
+      case "paragraph":
+        if (parts.length > 0 && !parts[parts.length - 1].endsWith("\n")) {
+          parts.push("\n");
         }
         walkChildren(node, depth);
-        parts.push('\n');
+        parts.push("\n");
         break;
 
-      case 'heading':
-        if (parts.length > 0) parts.push('\n');
+      case "heading":
+        if (parts.length > 0) parts.push("\n");
         walkChildren(node, depth);
-        parts.push('\n');
+        parts.push("\n");
         break;
 
-      case 'bulletList':
-      case 'orderedList':
+      case "bulletList":
+      case "orderedList":
         walkChildren(node, depth);
         break;
 
-      case 'listItem':
-        parts.push('  '.repeat(depth) + '• ');
+      case "listItem":
+        parts.push("  ".repeat(depth) + "• ");
         walkChildren(node, depth + 1);
-        if (!parts[parts.length - 1].endsWith('\n')) parts.push('\n');
+        if (!parts[parts.length - 1].endsWith("\n")) parts.push("\n");
         break;
 
-      case 'codeBlock':
-        parts.push('\n```\n');
+      case "codeBlock":
+        parts.push("\n```\n");
         walkChildren(node, depth);
-        parts.push('\n```\n');
+        parts.push("\n```\n");
         break;
 
-      case 'blockquote':
-        parts.push('\n> ');
+      case "blockquote":
+        parts.push("\n> ");
         walkChildren(node, depth);
-        parts.push('\n');
+        parts.push("\n");
         break;
 
-      case 'table':
+      case "table":
         walkChildren(node, depth);
-        parts.push('\n');
+        parts.push("\n");
         break;
 
-      case 'tableRow':
+      case "tableRow":
         walkChildren(node, depth);
-        parts.push('\n');
+        parts.push("\n");
         break;
 
-      case 'tableCell':
-      case 'tableHeader':
+      case "tableCell":
+      case "tableHeader":
         walkChildren(node, depth);
-        parts.push(' | ');
+        parts.push(" | ");
         break;
 
-      case 'mention':
-        parts.push(`@${node.attrs?.text || node.attrs?.id || 'unknown'}`);
+      case "mention":
+        parts.push(`@${node.attrs?.text || node.attrs?.id || "unknown"}`);
         break;
 
-      case 'emoji':
-        parts.push(node.attrs?.shortName || '');
+      case "emoji":
+        parts.push(node.attrs?.shortName || "");
         break;
 
-      case 'inlineCard':
-        parts.push(node.attrs?.url || '');
+      case "inlineCard":
+        parts.push(node.attrs?.url || "");
         break;
 
-      case 'mediaGroup':
-      case 'mediaSingle':
-        parts.push('[media attachment]');
+      case "mediaGroup":
+      case "mediaSingle":
+        parts.push("[media attachment]");
         break;
 
-      case 'rule':
-        parts.push('\n---\n');
+      case "rule":
+        parts.push("\n---\n");
         break;
 
-      case 'doc':
+      case "doc":
         walkChildren(node, depth);
         break;
 
@@ -110,14 +110,15 @@ function extractPlainText(adf) {
 
   function walkChildren(node, depth) {
     if (Array.isArray(node.content)) {
-      node.content.forEach(child => walk(child, depth));
+      node.content.forEach((child) => walk(child, depth));
     }
   }
 
   walk(adf);
 
-  return parts.join('')
-    .replace(/\n{3,}/g, '\n\n')  // Collapse excessive newlines
+  return parts
+    .join("")
+    .replace(/\n{3,}/g, "\n\n") // Collapse excessive newlines
     .trim();
 }
 
@@ -126,9 +127,9 @@ function extractPlainText(adf) {
  * remove control characters except newlines.
  */
 function sanitiseString(val, maxLength = 10000) {
-  if (typeof val !== 'string') return '';
+  if (typeof val !== "string") return "";
   return val
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Control chars except \n \r \t
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // Control chars except \n \r \t
     .trim()
     .substring(0, maxLength);
 }
@@ -138,7 +139,10 @@ function sanitiseString(val, maxLength = 10000) {
  */
 function safeStringArray(val) {
   if (!Array.isArray(val)) return [];
-  return val.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean);
+  return val
+    .filter((v) => typeof v === "string")
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -156,62 +160,64 @@ function safeStringArray(val) {
  */
 function normaliseToTicketDTO(issue) {
   if (!issue || !issue.key) {
-    throw new Error('Invalid Jira issue: missing key');
+    throw new Error("Invalid Jira issue: missing key");
   }
 
   const f = issue.fields || {};
 
   // Extract description — handle both ADF objects and plain strings
   let description;
-  if (typeof f.description === 'string') {
+  if (typeof f.description === "string") {
     description = f.description;
-  } else if (f.description && typeof f.description === 'object') {
+  } else if (f.description && typeof f.description === "object") {
     description = extractPlainText(f.description);
   } else {
-    description = '';
+    description = "";
   }
 
   const dto = {
-    ticket_id:          String(issue.id || ''),
-    ticket_key:         String(issue.key),
-    ticket_summary:     sanitiseString(f.summary || '', 500),
+    ticket_id: String(issue.id || ""),
+    ticket_key: String(issue.key),
+    ticket_summary: sanitiseString(f.summary || "", 500),
     ticket_description: sanitiseString(description, 10000),
-    ticket_priority:    f.priority?.name || 'Medium',
-    ticket_labels:      safeStringArray(f.labels),
-    ticket_components:  Array.isArray(f.components)
-      ? f.components.map(c => typeof c === 'object' ? c.name : String(c)).filter(Boolean)
+    ticket_priority: f.priority?.name || "Medium",
+    ticket_labels: safeStringArray(f.labels),
+    ticket_components: Array.isArray(f.components)
+      ? f.components.map((c) => (typeof c === "object" ? c.name : String(c))).filter(Boolean)
       : [],
     ticket_assignee: {
-      name:            f.assignee?.displayName || 'Unassigned',
-      email:           f.assignee?.emailAddress || null,
+      name: f.assignee?.displayName || "Unassigned",
+      email: f.assignee?.emailAddress || null,
       jira_account_id: f.assignee?.accountId || null,
     },
     ticket_reporter: {
-      name:  f.reporter?.displayName || 'Unknown',
+      name: f.reporter?.displayName || "Unknown",
       email: f.reporter?.emailAddress || null,
     },
     ticket_created: f.created || new Date().toISOString(),
-    ticket_type:    f.issuetype?.name || 'Task',
+    ticket_type: f.issuetype?.name || "Task",
   };
 
   // Validate priority is one of expected values
-  const validPriorities = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Critical'];
+  const validPriorities = ["Highest", "High", "Medium", "Low", "Lowest", "Critical"];
   if (!validPriorities.includes(dto.ticket_priority)) {
-    logger.warn(`Unknown priority "${dto.ticket_priority}" for ${dto.ticket_key}, defaulting to Medium`);
-    dto.ticket_priority = 'Medium';
+    logger.warn(
+      `Unknown priority "${dto.ticket_priority}" for ${dto.ticket_key}, defaulting to Medium`,
+    );
+    dto.ticket_priority = "Medium";
   }
 
   // Validate ticket type
-  const validTypes = ['Bug', 'Story', 'Task', 'Epic', 'Sub-task', 'Improvement'];
+  const validTypes = ["Bug", "Story", "Task", "Epic", "Sub-task", "Improvement"];
   if (!validTypes.includes(dto.ticket_type)) {
     logger.warn(`Unknown type "${dto.ticket_type}" for ${dto.ticket_key}, keeping as-is`);
   }
 
   logger.info(
     `Normalised ${dto.ticket_key}: "${dto.ticket_summary.substring(0, 60)}" ` +
-    `[${dto.ticket_priority}/${dto.ticket_type}] ` +
-    `labels=[${dto.ticket_labels.join(',')}] ` +
-    `assignee=${dto.ticket_assignee.name}`
+      `[${dto.ticket_priority}/${dto.ticket_type}] ` +
+      `labels=[${dto.ticket_labels.join(",")}] ` +
+      `assignee=${dto.ticket_assignee.name}`,
   );
 
   return dto;
