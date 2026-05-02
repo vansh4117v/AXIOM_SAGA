@@ -1,16 +1,22 @@
+import os
 import uuid
 import json
 import asyncio
+import hmac
+import logging
 from functools import partial
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 
 from jira_client import parse_webhook_payload
 from models.ticket import TicketDTO
 from db.connection import get_connection
 from graph import run_sage_pipeline
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
 
 def _run_pipeline_sync(ticket: TicketDTO, run_id: str) -> None:
@@ -18,7 +24,14 @@ def _run_pipeline_sync(ticket: TicketDTO, run_id: str) -> None:
 
 
 @router.post("/webhook/jira")
-async def jira_webhook(payload: dict):
+async def jira_webhook(
+    payload: dict,
+    x_webhook_secret: str | None = Header(None),
+):
+    if _WEBHOOK_SECRET:
+        if not x_webhook_secret or not hmac.compare_digest(x_webhook_secret, _WEBHOOK_SECRET):
+            logger.warning("Webhook rejected: invalid or missing X-Webhook-Secret header")
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
     ticket = parse_webhook_payload(payload)
     run_id = str(uuid.uuid4())
 

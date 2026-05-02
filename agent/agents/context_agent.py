@@ -1,9 +1,9 @@
-import ast
 import json
 import time
 from datetime import datetime, timezone
 
 import openai
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from models.scratchpad import AgentScratchpad
 from prompt_loader import load_prompt
@@ -85,16 +85,16 @@ def _dispatch_tool(name: str, inputs: dict) -> str:
     if name == "search_codebase":
         result = search_codebase(inputs["query"], inputs.get("top_k", 5))
         result = validate_file_paths(result)
-        return str(result)
+        return json.dumps(result)
     if name == "get_file_content":
         result = get_file_content(inputs["file_path"])
-        return str(result)
+        return json.dumps(result) if isinstance(result, (dict, list)) else str(result)
     if name == "get_recent_prs_for_file":
         result = get_recent_prs_for_file(inputs["file_path"], inputs.get("limit", 5))
-        return str(result)
+        return json.dumps(result)
     if name == "search_closed_tickets":
         result = search_closed_tickets(inputs["keywords"])
-        return str(result)
+        return json.dumps(result)
     return f"unknown tool: {name}"
 
 
@@ -116,6 +116,11 @@ def _compute_retrieval_confidence(files: list[dict]) -> float:
     return round(sum(scores) / len(scores), 2)
 
 
+@retry(
+    retry=retry_if_exception_type(openai.RateLimitError),
+    wait=wait_exponential(min=1, max=10),
+    stop=stop_after_attempt(3),
+)
 def run_context_agent(state: AgentScratchpad) -> AgentScratchpad:
     started = time.monotonic()
     run_id = state["run_id"]
@@ -159,17 +164,17 @@ def run_context_agent(state: AgentScratchpad) -> AgentScratchpad:
 
                 if tc.function.name == "search_codebase":
                     try:
-                        all_files.extend(ast.literal_eval(result_str))
+                        all_files.extend(json.loads(result_str))
                     except Exception:
                         pass
                 elif tc.function.name == "get_recent_prs_for_file":
                     try:
-                        all_prs.extend(ast.literal_eval(result_str))
+                        all_prs.extend(json.loads(result_str))
                     except Exception:
                         pass
                 elif tc.function.name == "search_closed_tickets":
                     try:
-                        all_related_tickets.extend(ast.literal_eval(result_str))
+                        all_related_tickets.extend(json.loads(result_str))
                     except Exception:
                         pass
 

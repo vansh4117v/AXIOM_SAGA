@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timezone
 
 import openai
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from models.scratchpad import AgentScratchpad
 from prompt_loader import load_prompt
@@ -22,6 +23,11 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+@retry(
+    retry=retry_if_exception_type(openai.RateLimitError),
+    wait=wait_exponential(min=1, max=10),
+    stop=stop_after_attempt(3),
+)
 def classify_and_plan(state: AgentScratchpad) -> AgentScratchpad:
     started = time.monotonic()
 
@@ -36,7 +42,7 @@ def classify_and_plan(state: AgentScratchpad) -> AgentScratchpad:
     )
 
     response = _get_client().chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         max_tokens=512,
         messages=[
             {"role": "system", "content": load_prompt("orchestrator")},
@@ -49,13 +55,23 @@ def classify_and_plan(state: AgentScratchpad) -> AgentScratchpad:
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
-    classification = json.loads(raw.strip())
 
-    if classification.get("is_production") or classification["severity"] == "P0":
+    try:
+        classification = json.loads(raw.strip())
+    except json.JSONDecodeError as e:
+        print(f"[orchestrator] JSON parse failed: {e}, raw={raw[:200]}")
+        classification = {
+            "severity": state["ticket_priority"] if state["ticket_priority"] in ("P0", "P1", "P2", "P3") else "Medium",
+            "domain": "unknown",
+            "estimated_complexity": "medium",
+            "is_production": "production" in " ".join(state.get("ticket_labels", [])).lower(),
+        }
+
+    if classification.get("is_production") or classification.get("severity") == "P0":
         plan = ["risk_agent", "context_agent", "routing_agent"]
         reasoning = "P0 or production: risk first, explainer skipped for urgency"
         path = "risk_first"
-    elif classification["estimated_complexity"] == "low":
+    elif classification.get("estimated_complexity") == "low":
         plan = ["context_agent", "routing_agent", "explainer_agent"]
         reasoning = "Low complexity: risk agent skipped"
         path = "low_complexity"

@@ -7,4 +7,5 @@ langgraph
 pydantic
 sse-starlette
 python-dotenv
+tenacity
 pytest

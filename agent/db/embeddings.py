@@ -20,8 +20,9 @@ def _embed(texts: list[str]) -> list[list[float]]:
 
 
 def extract_semantic_chunk(raw: str, extension: str) -> str:
+    lines = raw.split("\n")
+
     if extension == ".py":
-        lines = raw.split("\n")
         meaningful = [
             l for l in lines
             if l.strip().startswith(("def ", "class ", '"""', "'''", "import "))
@@ -30,6 +31,20 @@ def extract_semantic_chunk(raw: str, extension: str) -> str:
         result = "\n".join(meaningful[:80])
         if len(result) > 100:
             return result[:1500]
+
+    if extension in {".js", ".ts", ".jsx", ".tsx"}:
+        meaningful = [
+            l for l in lines
+            if l.strip().startswith((
+                "function ", "class ", "export ", "import ", "const ", "async ",
+                "interface ", "type ", "module.exports",
+            ))
+            or "=>" in l
+        ]
+        result = "\n".join(meaningful[:80])
+        if len(result) > 100:
+            return result[:1500]
+
     return raw[:1500].strip()
 
 
