@@ -7,3 +7,4 @@ __pycache__/
 venv/
 virenv
 virenv/
+.pytest_cache/

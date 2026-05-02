@@ -1,0 +1,16 @@
+.venv
+virenv
+__pycache__
+*.pyc
+.git
+.gitignore
+node_modules
+.env
+*.zip
+*.mp4
+*.png
+*.jpg
+data
+models
+.cache
+.pytest_cache
