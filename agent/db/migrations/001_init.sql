@@ -1,17 +1,19 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Recreate code_embeddings with correct dimension (384 for all-MiniLM-L6-v2)
+DROP TABLE IF EXISTS code_embeddings;
 CREATE TABLE code_embeddings (
     id           SERIAL PRIMARY KEY,
     repo         VARCHAR(255) NOT NULL,
     file_path    VARCHAR(512) NOT NULL,
     chunk_text   TEXT NOT NULL,
-    embedding    vector(1536),
+    embedding    vector(384),
     last_updated TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(repo, file_path)
 );
-CREATE INDEX ON code_embeddings USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS code_embeddings_hnsw_idx ON code_embeddings USING hnsw (embedding vector_cosine_ops);
 
-CREATE TABLE tickets (
+CREATE TABLE IF NOT EXISTS tickets (
     id            SERIAL PRIMARY KEY,
     ticket_key    VARCHAR(50) UNIQUE NOT NULL,
     jira_issue_id VARCHAR(50) UNIQUE NOT NULL,
@@ -22,7 +24,7 @@ CREATE TABLE tickets (
     processed_at  TIMESTAMPTZ
 );
 
-CREATE TABLE briefings (
+CREATE TABLE IF NOT EXISTS briefings (
     id                 SERIAL PRIMARY KEY,
     run_id             UUID NOT NULL UNIQUE,
     ticket_key         VARCHAR(50) REFERENCES tickets(ticket_key),
@@ -34,7 +36,7 @@ CREATE TABLE briefings (
     created_at         TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE agent_prompts (
+CREATE TABLE IF NOT EXISTS agent_prompts (
     id            SERIAL PRIMARY KEY,
     agent_name    VARCHAR(100) UNIQUE NOT NULL,
     system_prompt TEXT NOT NULL,
@@ -43,7 +45,7 @@ CREATE TABLE agent_prompts (
     updated_by    VARCHAR(100)
 );
 
-CREATE TABLE team_registry (
+CREATE TABLE IF NOT EXISTS team_registry (
     id                  SERIAL PRIMARY KEY,
     team_name           VARCHAR(100) NOT NULL,
     member_name         VARCHAR(100) NOT NULL,
@@ -54,13 +56,13 @@ CREATE TABLE team_registry (
     escalation_priority INT DEFAULT 1
 );
 
-CREATE TABLE jira_poll_state (
+CREATE TABLE IF NOT EXISTS jira_poll_state (
     id              SERIAL PRIMARY KEY,
     last_polled_at  TIMESTAMPTZ DEFAULT NOW(),
     last_ticket_key VARCHAR(50)
 );
 
-CREATE TABLE sse_events (
+CREATE TABLE IF NOT EXISTS sse_events (
     id         SERIAL PRIMARY KEY,
     run_id     UUID NOT NULL,
     event_type VARCHAR(50) NOT NULL,
@@ -68,4 +70,4 @@ CREATE TABLE sse_events (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     delivered  BOOLEAN DEFAULT FALSE
 );
-CREATE INDEX ON sse_events (run_id, delivered);
+CREATE INDEX IF NOT EXISTS sse_events_run_delivered_idx ON sse_events (run_id, delivered);

@@ -2,7 +2,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-import openai
+from groq import Groq
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from models.scratchpad import AgentScratchpad
@@ -15,7 +15,7 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        _client = openai.OpenAI()
+        _client = Groq()
     return _client
 
 
@@ -24,7 +24,7 @@ def _now_iso() -> str:
 
 
 @retry(
-    retry=retry_if_exception_type(openai.RateLimitError),
+    retry=retry_if_exception_type(Exception),
     wait=wait_exponential(min=1, max=10),
     stop=stop_after_attempt(3),
 )
@@ -42,7 +42,7 @@ def classify_and_plan(state: AgentScratchpad) -> AgentScratchpad:
     )
 
     response = _get_client().chat.completions.create(
-        model="gpt-4o",
+        model="llama-3.3-70b-versatile",
         max_tokens=512,
         messages=[
             {"role": "system", "content": load_prompt("orchestrator")},

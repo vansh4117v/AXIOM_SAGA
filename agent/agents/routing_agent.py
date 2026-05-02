@@ -2,7 +2,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-import openai
+from groq import Groq
 
 from models.scratchpad import AgentScratchpad
 from prompt_loader import load_prompt
@@ -15,7 +15,7 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        _client = openai.OpenAI()
+        _client = Groq()
     return _client
 
 TOOLS = [
@@ -62,7 +62,7 @@ def run_routing_agent(state: AgentScratchpad) -> AgentScratchpad:
 
     while True:
         response = _get_client().chat.completions.create(
-            model="gpt-4o-mini",
+            model="llama-3.3-70b-versatile",
             max_tokens=1500,
             tools=TOOLS,
             messages=messages,

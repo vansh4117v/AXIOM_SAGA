@@ -1,13 +1,21 @@
 import os
 import base64
-import openai
 import requests
 from pathlib import Path
+from sentence_transformers import SentenceTransformer
 from db.connection import get_connection
 
 SUPPORTED_EXTENSIONS = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go"}
 
-_oai = openai.OpenAI()
+# Local embedding model — 384 dimensions, no API key needed
+_model = None
+
+
+def _get_model() -> SentenceTransformer:
+    global _model
+    if _model is None:
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 
 def _github_headers() -> dict:
@@ -15,8 +23,9 @@ def _github_headers() -> dict:
 
 
 def _embed(texts: list[str]) -> list[list[float]]:
-    resp = _oai.embeddings.create(model="text-embedding-3-small", input=texts)
-    return [item.embedding for item in resp.data]
+    model = _get_model()
+    embeddings = model.encode(texts, normalize_embeddings=True)
+    return [e.tolist() for e in embeddings]
 
 
 def extract_semantic_chunk(raw: str, extension: str) -> str:
@@ -48,8 +57,18 @@ def extract_semantic_chunk(raw: str, extension: str) -> str:
     return raw[:1500].strip()
 
 
-def embed_repository(owner: str, repo: str, branch: str = "main") -> None:
+def embed_repository(owner: str, repo: str, branch: str | None = None) -> None:
     headers = _github_headers()
+
+    # Auto-detect default branch if not specified
+    if branch is None:
+        repo_resp = requests.get(
+            f"https://api.github.com/repos/{owner}/{repo}",
+            headers=headers, timeout=10,
+        ).json()
+        branch = repo_resp.get("default_branch", "main")
+        print(f"  Detected default branch: {branch}")
+
     tree_url = (
         f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
     )
@@ -119,7 +138,7 @@ def search_codebase(query: str, top_k: int = 5) -> list[dict]:
             "path": row[0],
             "snippet": row[1][:500],
             "similarity_score": round(float(row[2]), 3),
-            "source": "pgvector",
+            "source": "sentence-transformers",
         }
         for row in rows
     ]
