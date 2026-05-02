@@ -2,19 +2,19 @@ import os
 import base64
 import requests
 from pathlib import Path
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from db.connection import get_connection
 
 SUPPORTED_EXTENSIONS = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go"}
 
-# Local embedding model — 384 dimensions, no API key needed
+# Local embedding model — 384 dimensions, using fastembed (ONNX, no PyTorch needed)
 _model = None
 
 
-def _get_model() -> SentenceTransformer:
+def _get_model() -> TextEmbedding:
     global _model
     if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        _model = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
     return _model
 
 
@@ -24,7 +24,8 @@ def _github_headers() -> dict:
 
 def _embed(texts: list[str]) -> list[list[float]]:
     model = _get_model()
-    embeddings = model.encode(texts, normalize_embeddings=True)
+    embeddings = list(model.embed(texts))
+    # fastembed returns numpy arrays, convert to list of floats
     return [e.tolist() for e in embeddings]
 
 
