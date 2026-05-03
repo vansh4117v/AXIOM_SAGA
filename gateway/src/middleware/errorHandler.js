@@ -42,15 +42,11 @@ function errorHandler(err, req, res, _next) {
   res.status(500).json({
     error: {
       code: 'INTERNAL_ERROR',
-      message: process.env.NODE_ENV === 'production'
-        ? 'An unexpected error occurred'
-        : err.message,
-      _debug: {
-        name: err.name,
-        message: err.message,
-        prismaCode: err.code || null,
-        meta: err.meta || null,
-      },
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+      prismaCode: err.code || null,
+      meta: err.meta || null,
     },
   });
 }
