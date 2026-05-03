@@ -34,7 +34,7 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          VITE_GATEWAY_URL: https://sage-gateway-1508.azurewebsites.net
+          VITE_GATEWAY_URL: https://axiom-saga-1.onrender.com/
           VITE_AI_ENGINE_URL: https://sage-agent-1508.azurewebsites.net
 
       - name: Deploy to Azure Static Web Apps
