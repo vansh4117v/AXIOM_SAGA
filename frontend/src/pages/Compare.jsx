@@ -23,7 +23,7 @@ function colReducer(state, action) {
       if (evt.type === 'plan_ready')
         return { ...state, plan: evt.data, events: [...state.events, evt] };
       if (evt.type === 'briefing_ready')
-        return { ...state, briefing: evt.data.briefing, events: [...state.events, evt], status: 'complete' };
+        return { ...state, briefing: evt.data.briefing || evt.data, events: [...state.events, evt], status: 'complete' };
       if (evt.type === 'pipeline_failed')
         return { ...state, events: [...state.events, evt], status: 'failed' };
       if (evt.type === 'timeout')

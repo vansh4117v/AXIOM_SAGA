@@ -1,111 +1,101 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
-import { Send, AlertCircle, Loader } from 'lucide-react';
-
-const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
-const TYPES = ['Bug', 'Story', 'Task', 'Incident', 'Epic'];
+import { Search, Zap, AlertCircle, Loader } from 'lucide-react';
 
 export default function SubmitForm({ onSubmitted }) {
-  const [form, setForm] = useState({
-    ticket_key: '', ticket_summary: '', ticket_description: '',
-    ticket_priority: 'Medium', ticket_type: 'Bug',
-    ticket_labels: '', ticket_components: '',
-  });
+  const [ticketKey, setTicketKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
-
   const submit = async (e) => {
     e.preventDefault();
-    if (!form.ticket_key || !form.ticket_summary || !form.ticket_description) {
-      setError('Key, Summary, and Description are required');
+    const key = ticketKey.trim().toUpperCase();
+    if (!key) {
+      setError('Enter a Jira ticket key');
+      return;
+    }
+    if (!/^[A-Z]+-\d+$/.test(key)) {
+      setError('Invalid format. Use PROJECT-123 (e.g., SAGE-1)');
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const dto = {
-        ticket_id: form.ticket_key,
-        ticket_key: `${form.ticket_key}-${Date.now()}`,
-        ticket_summary: form.ticket_summary,
-        ticket_description: form.ticket_description,
-        ticket_priority: form.ticket_priority,
-        ticket_type: form.ticket_type,
-        ticket_labels: form.ticket_labels.split(',').map(s => s.trim()).filter(Boolean),
-        ticket_components: form.ticket_components.split(',').map(s => s.trim()).filter(Boolean),
-        ticket_assignee: { name: 'SAGE User', email: '' },
-        ticket_reporter: { name: 'SAGE User', email: '' },
+      // Fetch ticket from gateway (which has it from Jira poller or will fetch it)
+      let ticketData;
+      try {
+        const { data } = await api.getTicket(key);
+        ticketData = data.ticket || data.ticketDto || {};
+      } catch (fetchErr) {
+        // Ticket not in gateway DB yet — submit directly with minimal info
+        // Gateway will validate and forward to agent
+        ticketData = null;
+      }
+
+      // Submit through gateway — gateway validates, upserts, forwards to agent
+      const dto = ticketData ? {
+        ticket_key: key,
+        ticket_id: ticketData.ticket_id || key,
+        ticket_summary: ticketData.ticket_summary || key,
+        ticket_description: ticketData.ticket_description || '',
+        ticket_priority: ticketData.ticket_priority || 'Medium',
+        ticket_type: ticketData.ticket_type || 'Task',
+        ticket_labels: ticketData.ticket_labels || [],
+        ticket_components: ticketData.ticket_components || [],
+        ticket_assignee: ticketData.ticket_assignee || { name: 'Unassigned', email: '' },
+        ticket_reporter: ticketData.ticket_reporter || { name: 'Unknown', email: '' },
+        ticket_created: ticketData.ticket_created || new Date().toISOString(),
+      } : {
+        ticket_key: key,
+        ticket_id: key,
+        ticket_summary: key,
+        ticket_description: '',
+        ticket_priority: 'Medium',
+        ticket_type: 'Task',
+        ticket_labels: [],
+        ticket_components: [],
+        ticket_assignee: { name: 'Unassigned', email: '' },
+        ticket_reporter: { name: 'Unknown', email: '' },
         ticket_created: new Date().toISOString(),
       };
-      const { data } = await api.analyse(dto);
+
+      const { data } = await api.submitTicket(dto);
       onSubmitted(data.run_id, data.ticket_key);
     } catch (err) {
-      setError(err.response?.data?.detail || err.message);
+      const msg = err.response?.data?.error?.message
+        || err.response?.data?.detail
+        || err.message;
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto animate-[fadeIn_0.3s_ease]">
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-sage-primary mb-1">Submit Ticket for Analysis</h2>
-        <p className="text-sm text-sage-muted">SAGE will reason about your ticket and produce a situational briefing.</p>
+    <div className="max-w-lg mx-auto animate-[fadeIn_0.3s_ease]">
+      <div className="mb-8 text-center">
+        <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+          <Zap size={24} className="text-accent" />
+        </div>
+        <h2 className="text-xl font-semibold text-sage-primary mb-1">Analyse a Jira Ticket</h2>
+        <p className="text-sm text-sage-muted">
+          Enter an existing Jira ticket key. SAGE will fetch its details, reason about it,
+          and produce a situational briefing.
+        </p>
       </div>
 
-      <form onSubmit={submit} className="space-y-5">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">Ticket Key *</label>
-            <input value={form.ticket_key} onChange={set('ticket_key')}
-              placeholder="PROJ-001"
-              className="w-full px-3.5 py-2.5 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary placeholder:text-sage-muted outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">Priority</label>
-            <select value={form.ticket_priority} onChange={set('ticket_priority')}
-              className="w-full px-3.5 py-2.5 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all appearance-none cursor-pointer">
-              {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-            </select>
-          </div>
-        </div>
-
+      <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">Summary *</label>
-          <input value={form.ticket_summary} onChange={set('ticket_summary')}
-            placeholder="Payment gateway 500 errors on retry after timeout"
-            className="w-full px-3.5 py-2.5 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary placeholder:text-sage-muted outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all" />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">Description *</label>
-          <textarea value={form.ticket_description} onChange={set('ticket_description')}
-            rows={5}
-            placeholder="Describe the issue in detail — what's happening, impact, reproduction steps..."
-            className="w-full px-3.5 py-2.5 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary placeholder:text-sage-muted outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all resize-y min-h-[120px]" />
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">Type</label>
-            <select value={form.ticket_type} onChange={set('ticket_type')}
-              className="w-full px-3.5 py-2.5 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all appearance-none cursor-pointer">
-              {TYPES.map(t => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">Labels</label>
-            <input value={form.ticket_labels} onChange={set('ticket_labels')}
-              placeholder="payments, production"
-              className="w-full px-3.5 py-2.5 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary placeholder:text-sage-muted outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">Components</label>
-            <input value={form.ticket_components} onChange={set('ticket_components')}
-              placeholder="backend, api"
-              className="w-full px-3.5 py-2.5 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary placeholder:text-sage-muted outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all" />
-          </div>
+          <label className="block text-xs font-semibold text-sage-muted uppercase tracking-wider mb-1.5">
+            Jira Ticket Key
+          </label>
+          <input
+            value={ticketKey}
+            onChange={(e) => setTicketKey(e.target.value)}
+            placeholder="SAGE-1"
+            autoFocus
+            className="w-full px-4 py-3 bg-bg-secondary border border-border-default rounded-lg text-sm text-sage-primary placeholder:text-sage-muted outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] transition-all font-mono text-center text-lg tracking-wider"
+          />
         </div>
 
         {error && (
@@ -115,12 +105,19 @@ export default function SubmitForm({ onSubmitted }) {
           </div>
         )}
 
-        <button type="submit" disabled={loading}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-accent hover:bg-accent-hover disabled:opacity-45 text-white font-medium rounded-lg transition-all duration-200 hover:shadow-[0_0_24px_var(--color-accent-glow)] cursor-pointer text-sm">
-          {loading ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-accent hover:bg-accent-hover disabled:opacity-45 text-white font-medium rounded-lg transition-all duration-200 hover:shadow-[0_0_24px_var(--color-accent-glow)] cursor-pointer text-sm"
+        >
+          {loading ? <Loader size={16} className="animate-spin" /> : <Search size={16} />}
           {loading ? 'Analysing…' : 'Analyse Ticket'}
         </button>
       </form>
+
+      <p className="text-xs text-sage-muted text-center mt-6">
+        Or click a ticket in the sidebar to view details and analyse it from there.
+      </p>
     </div>
   );
 }

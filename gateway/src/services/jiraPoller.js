@@ -126,7 +126,7 @@ async function pollJira() {
     const jql = `project = ${config.projectKey} AND updated >= -${config.lookbackMin}m ORDER BY updated DESC`;
     logger.info(`Polling Jira: ${jql}`);
 
-    const response = await axios.get(`${config.baseUrl}/rest/api/3/search`, {
+    const response = await axios.get(`${config.baseUrl}/rest/api/3/search/jql`, {
       params: {
         jql,
         maxResults: config.pollMaxResults,

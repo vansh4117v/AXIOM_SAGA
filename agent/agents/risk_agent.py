@@ -63,31 +63,44 @@ def run_risk_agent(state: AgentScratchpad) -> AgentScratchpad:
     ]
     tools_called = []
 
-    while True:
+    try:
+        while True:
+            response = _get_client().chat.completions.create(
+                model="llama-3.1-8b-instant",
+                max_tokens=1500,
+                tools=TOOLS,
+                messages=messages,
+            )
+
+            choice = response.choices[0]
+
+            if choice.finish_reason == "stop":
+                break
+
+            if choice.finish_reason == "tool_calls":
+                messages.append(choice.message)
+                for tc in choice.message.tool_calls:
+                    args = json.loads(tc.function.arguments)
+                    result_str = _dispatch_tool(tc.function.name, args)
+                    tools_called.append({"tool": tc.function.name, "input": args})
+                    push_sse_event(run_id, "tool_called", {"agent": "risk_agent", "tool": tc.function.name})
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_str,
+                    })
+    except Exception as e:
+        # Tool calling failed (common with small models) — retry without tools
+        print(f"[risk_agent] tool call failed ({e}), retrying without tools")
         response = _get_client().chat.completions.create(
             model="llama-3.1-8b-instant",
             max_tokens=1500,
-            tools=TOOLS,
-            messages=messages,
+            messages=[
+                {"role": "system", "content": load_prompt("risk_agent")},
+                {"role": "user", "content": user_prompt + "\n\nRespond with JSON only."},
+            ],
         )
-
         choice = response.choices[0]
-
-        if choice.finish_reason == "stop":
-            break
-
-        if choice.finish_reason == "tool_calls":
-            messages.append(choice.message)
-            for tc in choice.message.tool_calls:
-                args = json.loads(tc.function.arguments)
-                result_str = _dispatch_tool(tc.function.name, args)
-                tools_called.append({"tool": tc.function.name, "input": args})
-                push_sse_event(run_id, "tool_called", {"agent": "risk_agent", "tool": tc.function.name})
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result_str,
-                })
 
     raw = choice.message.content or ""
 
