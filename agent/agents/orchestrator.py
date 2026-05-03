@@ -30,6 +30,8 @@ def _now_iso() -> str:
 )
 def classify_and_plan(state: AgentScratchpad) -> AgentScratchpad:
     started = time.monotonic()
+    run_id = state["run_id"]
+    push_sse_event(run_id, "agent_started", {"agent": "orchestrator"})
 
     prompt = (
         f"Ticket key: {state['ticket_key']}\n"
@@ -99,9 +101,19 @@ def classify_and_plan(state: AgentScratchpad) -> AgentScratchpad:
     )
 
     push_sse_event(
-        state["run_id"],
+        run_id,
         "plan_ready",
         {"plan": plan, "reasoning": reasoning, "classification": classification},
+    )
+    push_sse_event(
+        run_id,
+        "agent_complete",
+        {
+            "agent": "orchestrator",
+            "duration_ms": duration_ms,
+            "decision": f"plan={plan}",
+            "decision_made": f"plan={plan}",
+        },
     )
     return state
 
