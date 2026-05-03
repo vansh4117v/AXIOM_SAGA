@@ -33,6 +33,15 @@ def _fallback_result(reason: str = "No matching team member found in registry") 
     }
 
 
+def _is_real_owner(owner: dict) -> bool:
+    return bool(
+        owner
+        and owner.get("name")
+        and owner.get("name") != "Unassigned"
+        and owner.get("team") != "N/A"
+    )
+
+
 def run_routing_agent(state: AgentScratchpad) -> AgentScratchpad:
     started = time.monotonic()
     run_id = state["run_id"]
@@ -91,7 +100,7 @@ def run_routing_agent(state: AgentScratchpad) -> AgentScratchpad:
     state["primary_owner"] = result.get("primary_owner", {})
     state["escalation_path"] = result.get("escalation_path", [])
     state["suggested_question"] = result.get("suggested_question", "")
-    state["routing_confidence"] = 1.0 if state["primary_owner"].get("name") else 0.0
+    state["routing_confidence"] = 1.0 if _is_real_owner(state["primary_owner"]) else 0.0
     state["agent_trace"].append({
         "agent": "routing_agent",
         "started_at": datetime.now(timezone.utc).isoformat(),

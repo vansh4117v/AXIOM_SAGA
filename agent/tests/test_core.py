@@ -183,3 +183,42 @@ class TestRoutingAgent:
         assert "Team registry JSON" in create_kwargs["messages"][1]["content"]
         assert result["primary_owner"]["name"] == "Parshvi Jain"
         assert result["routing_confidence"] == 1.0
+
+    @patch("agents.routing_agent.push_sse_event")
+    @patch("agents.routing_agent.get_team_registry")
+    @patch("agents.routing_agent._get_client")
+    def test_routing_fallback_is_zero_confidence(
+        self,
+        mock_get_client,
+        mock_get_team_registry,
+        _mock_push_sse_event,
+    ):
+        from agents.routing_agent import run_routing_agent
+
+        mock_get_team_registry.return_value = []
+
+        message = MagicMock()
+        message.content = "not json"
+        choice = MagicMock()
+        choice.message = message
+        response = MagicMock()
+        response.choices = [choice]
+
+        client = MagicMock()
+        client.chat.completions.create.return_value = response
+        mock_get_client.return_value = client
+
+        state = {
+            "run_id": "run-test",
+            "ticket_key": "SCRUM-14",
+            "ticket_summary": "stuff broken",
+            "ticket_priority": "Medium",
+            "classification": {"domain": "unknown"},
+            "relevant_files": [],
+            "agent_trace": [],
+        }
+
+        result = run_routing_agent(state)
+
+        assert result["primary_owner"]["name"] == "Unassigned"
+        assert result["routing_confidence"] == 0.0
