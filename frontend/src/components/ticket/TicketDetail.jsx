@@ -227,12 +227,22 @@ function buildTraceEvents(trace, executionPlan) {
 
   trace.forEach(entry => {
     (entry.tools_called || []).forEach(tool => {
+      const inputSummary = summarizeToolInput(tool.input);
       events.push({
         type: 'tool_called',
         data: {
           agent: entry.agent,
           tool: tool.tool,
-          input_summary: summarizeToolInput(tool.input),
+          input_summary: inputSummary,
+        },
+      });
+      events.push({
+        type: 'tool_result',
+        data: {
+          agent: entry.agent,
+          tool: tool.tool,
+          input_summary: inputSummary,
+          result_summary: '',
         },
       });
     });
