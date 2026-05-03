@@ -4,7 +4,7 @@
   "description": "SAGE Node.js Gateway — Jira integration, auth, prompt management, ticket routing",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "npx prisma migrate deploy && node src/index.js",
     "dev": "nodemon src/index.js",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
@@ -26,13 +26,13 @@
     "node-cron": "^3.0.3",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "prisma": "^6.7.0",
     "uuid": "^9.0.1",
     "winston": "^3.13.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0",
-    "prisma": "^6.7.0"
+    "nodemon": "^3.1.0"
   },
   "engines": {
     "node": ">=18.0.0"
