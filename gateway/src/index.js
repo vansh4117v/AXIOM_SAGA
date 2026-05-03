@@ -21,7 +21,7 @@ const ticketRoutes = require('./routes/tickets');
 const promptRoutes = require('./routes/prompts');
 
 const app = express();
-const PORT = process.env.GATEWAY_PORT || 3001;
+const PORT = process.env.GATEWAY_PORT || process.env.PORT || 8080;
 
 
 app.use(helmet({

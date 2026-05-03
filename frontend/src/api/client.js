@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const GATEWAY = import.meta.env.VITE_GATEWAY_URL || 'http://localhost:3001';
-const AI_ENGINE = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8000';
+const GATEWAY = import.meta.env.VITE_GATEWAY_URL || 'https://sage-gateway-1508.azurewebsites.net';
+const AI_ENGINE = import.meta.env.VITE_AI_ENGINE_URL || 'https://sage-agent-1508.azurewebsites.net';
 
 // ─── Auth state ─────────────────────────────────────────────
 let accessToken = localStorage.getItem('sage_access_token');
