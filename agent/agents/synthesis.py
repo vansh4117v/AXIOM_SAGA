@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import datetime, timezone
 
@@ -93,13 +94,19 @@ def run_synthesis(state: AgentScratchpad) -> AgentScratchpad:
     except Exception as e:
         print(f"[synthesis] DB persist failed: {e}")
 
-    try:
-        trace_url = f"/briefing/{run_id}"
-        write_comment(state["ticket_key"], briefing, trace_url)
-        push_sse_event(run_id, "jira_commented", {"ticket_key": state["ticket_key"]})
-    except Exception as e:
-        print(f"[synthesis] Jira write-back failed: {e}")
-        push_sse_event(run_id, "jira_writeback_failed", {"ticket_key": state["ticket_key"], "error": str(e)})
+    ticket_key = state["ticket_key"]
+    is_real_jira_key = bool(re.match(r'^[A-Z]+-\d+$', ticket_key))
+
+    if is_real_jira_key:
+        try:
+            trace_url = f"/briefing/{run_id}"
+            write_comment(ticket_key, briefing, trace_url)
+            push_sse_event(run_id, "jira_commented", {"ticket_key": ticket_key})
+        except Exception as e:
+            print(f"[synthesis] Jira write-back failed: {e}")
+            push_sse_event(run_id, "jira_writeback_failed", {"error": str(e)})
+    else:
+        push_sse_event(run_id, "jira_skipped", {"reason": "manual submission"})
 
     duration_ms = int((time.monotonic() - started) * 1000)
 
@@ -116,5 +123,8 @@ def run_synthesis(state: AgentScratchpad) -> AgentScratchpad:
         "reasoning": f"risk_level={state.get('overall_risk_level', 'low')}",
     })
 
-    push_sse_event(run_id, "briefing_ready", briefing)
+    push_sse_event(run_id, "briefing_ready", {
+        "briefing": briefing,
+        "trace": state.get("agent_trace", [])
+    })
     return state
