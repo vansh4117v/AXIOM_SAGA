@@ -1,6 +1,6 @@
 {
   "name": "sage-gateway",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SAGE Node.js Gateway — Jira integration, auth, prompt management, ticket routing",
   "main": "src/index.js",
   "scripts": {

@@ -1,3 +1,7 @@
 .agents
 skills-lock.json
 *.zip
+
+scripts/
+context.md
+.codex

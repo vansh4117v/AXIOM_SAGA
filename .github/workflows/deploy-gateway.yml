@@ -13,9 +13,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gateway/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./gateway
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: ./gateway
+        run: npx prisma generate
+
+      - name: Create deployment zip
+        run: |
+          cd gateway
+          zip -r ../gateway-deploy.zip . -x ".env" ".gitignore" "node_modules/.cache/*"
+
       - name: Deploy Gateway
         uses: azure/webapps-deploy@v3
         with:
           app-name: sage-gateway-1508
           publish-profile: ${{ secrets.AZURE_GATEWAY_PUBLISH_PROFILE }}
-          package: ./gateway
+          package: gateway-deploy.zip
+          type: zip
