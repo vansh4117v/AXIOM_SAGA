@@ -45,6 +45,12 @@ function errorHandler(err, req, res, _next) {
       message: process.env.NODE_ENV === 'production'
         ? 'An unexpected error occurred'
         : err.message,
+      _debug: {
+        name: err.name,
+        message: err.message,
+        prismaCode: err.code || null,
+        meta: err.meta || null,
+      },
     },
   });
 }
