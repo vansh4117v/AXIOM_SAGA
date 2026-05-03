@@ -39,11 +39,17 @@ async function submitTicket(body) {
     throw new ValidationError('ticket_key must match format: PROJECT-123');
   }
 
-  // Dedup check
+  // Dedup check — allow re-analysis of failed/complete tickets
   const dedup = getDeduplicator();
-  if (await dedup.isDuplicate(dto.ticket_key)) {
-    throw new ConflictError(`Ticket ${dto.ticket_key} already processed or in progress`);
+  const existing = await prisma.ticket.findUnique({
+    where: { ticketKey: dto.ticket_key },
+    select: { status: true },
+  });
+  if (existing && existing.status === 'processing') {
+    throw new ConflictError(`Ticket ${dto.ticket_key} is currently being processed`);
   }
+  // Clear dedup cache so ticket can be reprocessed
+  dedup.markProcessed(dto.ticket_key, 'pending');
 
   // Upsert ticket in DB
   await prisma.ticket.upsert({

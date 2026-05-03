@@ -136,53 +136,56 @@ def run_context_agent(state: AgentScratchpad) -> AgentScratchpad:
     all_prs: list[dict] = []
     all_related_tickets: list[dict] = []
 
-    while True:
-        response = _get_client().chat.completions.create(
-            model="llama-3.1-8b-instant",
-            max_tokens=2000,
-            tools=TOOLS,
-            messages=messages,
-        )
+    try:
+        while True:
+            response = _get_client().chat.completions.create(
+                model="llama-3.1-8b-instant",
+                max_tokens=2000,
+                tools=TOOLS,
+                messages=messages,
+            )
 
-        choice = response.choices[0]
+            choice = response.choices[0]
 
-        if choice.finish_reason == "stop":
-            break
+            if choice.finish_reason == "stop":
+                break
 
-        if choice.finish_reason == "tool_calls":
-            messages.append(choice.message)
-            for tc in choice.message.tool_calls:
-                args = json.loads(tc.function.arguments)
-                result_str = _dispatch_tool(tc.function.name, args)
-                tools_called.append({"tool": tc.function.name, "input": args})
+            if choice.finish_reason == "tool_calls":
+                messages.append(choice.message)
+                for tc in choice.message.tool_calls:
+                    args = json.loads(tc.function.arguments)
+                    result_str = _dispatch_tool(tc.function.name, args)
+                    tools_called.append({"tool": tc.function.name, "input": args})
 
-                push_sse_event(run_id, "tool_called", {
-                    "agent": "context_agent",
-                    "tool": tc.function.name,
-                    "input_summary": str(args)[:200],
-                })
+                    push_sse_event(run_id, "tool_called", {
+                        "agent": "context_agent",
+                        "tool": tc.function.name,
+                        "input_summary": str(args)[:200],
+                    })
 
-                if tc.function.name == "search_codebase":
-                    try:
-                        all_files.extend(json.loads(result_str))
-                    except Exception:
-                        pass
-                elif tc.function.name == "get_recent_prs_for_file":
-                    try:
-                        all_prs.extend(json.loads(result_str))
-                    except Exception:
-                        pass
-                elif tc.function.name == "search_closed_tickets":
-                    try:
-                        all_related_tickets.extend(json.loads(result_str))
-                    except Exception:
-                        pass
+                    if tc.function.name == "search_codebase":
+                        try:
+                            all_files.extend(json.loads(result_str))
+                        except Exception:
+                            pass
+                    elif tc.function.name == "get_recent_prs_for_file":
+                        try:
+                            all_prs.extend(json.loads(result_str))
+                        except Exception:
+                            pass
+                    elif tc.function.name == "search_closed_tickets":
+                        try:
+                            all_related_tickets.extend(json.loads(result_str))
+                        except Exception:
+                            pass
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result_str,
-                })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_str,
+                    })
+    except Exception as e:
+        print(f"[context_agent] tool call failed ({e}), continuing with fallback")
 
     # Hard fallback: if LLM stopped without calling any tools, force one search
     if not tools_called:

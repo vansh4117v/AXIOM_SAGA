@@ -32,7 +32,7 @@ function reducer(state, action) {
       if (evt.type === 'plan_ready')
         return { ...state, plan: evt.data, events: [...state.events, evt] };
       if (evt.type === 'briefing_ready')
-        return { ...state, briefing: evt.data.briefing, events: [...state.events, evt], status: 'complete' };
+        return { ...state, briefing: evt.data.briefing || evt.data, events: [...state.events, evt], status: 'complete' };
       if (evt.type === 'pipeline_failed')
         return { ...state, events: [...state.events, evt], status: 'failed' };
       if (evt.type === 'timeout')
@@ -107,7 +107,10 @@ export default function Dashboard({ onNavigate }) {
 
           {/* Ticket selected but no run_id (polled ticket, already complete) */}
           {!showSubmit && !state.selectedRunId && state.selectedTicketKey && (
-            <TicketDetail ticketKey={state.selectedTicketKey} />
+            <TicketDetail
+              ticketKey={state.selectedTicketKey}
+              onAnalyse={handleTicketSubmitted}
+            />
           )}
         </main>
       </div>
