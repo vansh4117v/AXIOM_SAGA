@@ -28,9 +28,15 @@ jobs:
         working-directory: ./gateway
         run: npx prisma generate
 
+      - name: Create deployment zip
+        run: |
+          cd gateway
+          zip -r ../gateway-deploy.zip . -x ".env" ".gitignore" "node_modules/.cache/*"
+
       - name: Deploy Gateway
         uses: azure/webapps-deploy@v3
         with:
           app-name: sage-gateway-1508
           publish-profile: ${{ secrets.AZURE_GATEWAY_PUBLISH_PROFILE }}
-          package: ./gateway
+          package: gateway-deploy.zip
+          type: zip
