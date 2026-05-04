@@ -10,6 +10,7 @@ def notify_gateway(
     briefing: dict | None = None,
     agent_trace: list | None = None,
     scratchpad: dict | None = None,
+    skip_jira_write: bool = False,
 ) -> None:
     gateway_url = os.environ.get("GATEWAY_URL") or os.environ.get("SAGE_GATEWAY_URL")
     callback_url = os.environ.get("GATEWAY_BRIEFING_CALLBACK_URL")
@@ -23,7 +24,7 @@ def notify_gateway(
         "ticket_key": ticket_key,
         "run_id": run_id,
         "status": status,
-        "skip_jira_write": True,
+        "skip_jira_write": skip_jira_write,
     }
 
     if briefing is not None:
