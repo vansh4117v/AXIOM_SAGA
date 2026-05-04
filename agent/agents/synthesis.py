@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from models.scratchpad import AgentScratchpad
 from db.connection import get_connection
+from gateway_client import notify_gateway
 from jira_client import write_comment
 from sse_writer import push_sse_event
 
@@ -122,6 +123,18 @@ def run_synthesis(state: AgentScratchpad) -> AgentScratchpad:
         "decision_made": f"briefing assembled, confidence={confidence:.2f}",
         "reasoning": f"risk_level={state.get('overall_risk_level', 'low')}",
     })
+
+    try:
+        notify_gateway(
+            ticket_key=state["ticket_key"],
+            run_id=run_id,
+            status="complete",
+            briefing=briefing,
+            agent_trace=state.get("agent_trace", []),
+            scratchpad=_safe_serialize(state),
+        )
+    except Exception as e:
+        print(f"[synthesis] Gateway callback failed: {e}")
 
     push_sse_event(run_id, "briefing_ready", {
         "briefing": briefing,
