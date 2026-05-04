@@ -129,31 +129,73 @@ app.post('/admin/poller/start', authenticate, authorize('admin'), (_req, res) =>
 
 app.post('/callback/briefing', express.json(), async (req, res, next) => {
   try {
-    const { ticket_key, briefing, run_id, trace_url } = req.body;
+    const {
+      ticket_key,
+      briefing,
+      run_id,
+      trace_url,
+      status = 'complete',
+      agent_trace = [],
+      scratchpad = {},
+      execution_plan,
+      overall_confidence,
+      skip_jira_write = false,
+    } = req.body;
 
-    if (!ticket_key || !briefing) {
+    if (!ticket_key) {
       return res.status(400).json({
-        error: { code: 'VALIDATION_ERROR', message: 'ticket_key and briefing required' },
+        error: { code: 'VALIDATION_ERROR', message: 'ticket_key required' },
       });
     }
 
     const dashboardUrl = trace_url
       || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/briefing/${run_id}`;
 
-    try {
-      await writeCommentToJira(ticket_key, briefing, dashboardUrl);
-    } catch (writeErr) {
-      logger.error(`Jira write-back failed for ${ticket_key}: ${writeErr.message}`);
+    if (briefing && run_id) {
+      const existingBriefing = await prisma.briefing.findFirst({ where: { runId: run_id } });
+      const briefingData = {
+        ticketKey: ticket_key,
+        scratchpad,
+        briefing,
+        agentTrace: agent_trace,
+        overallConfidence: overall_confidence ?? briefing.overall_confidence ?? null,
+        executionPlan: execution_plan || briefing.execution_plan || [],
+      };
+
+      if (existingBriefing) {
+        await prisma.briefing.update({
+          where: { id: existingBriefing.id },
+          data: briefingData,
+        });
+      } else {
+        await prisma.briefing.create({
+          data: {
+            runId: run_id,
+            ...briefingData,
+          },
+        });
+      }
+    }
+
+    if (briefing && !skip_jira_write) {
+      try {
+        await writeCommentToJira(ticket_key, briefing, dashboardUrl);
+      } catch (writeErr) {
+        logger.error(`Jira write-back failed for ${ticket_key}: ${writeErr.message}`);
+      }
     }
 
     await prisma.ticket.update({
       where: { ticketKey: ticket_key },
-      data: { status: 'complete', processedAt: new Date() },
+      data: {
+        status: ['complete', 'failed', 'timeout'].includes(status) ? status : 'complete',
+        processedAt: new Date(),
+      },
     }).catch(() => {});
 
-    getDeduplicator().updateStatus(ticket_key, 'complete');
+    getDeduplicator().updateStatus(ticket_key, status);
 
-    logger.info(`Briefing callback: ${ticket_key} complete`);
+    logger.info(`Briefing callback: ${ticket_key} ${status}`);
     return res.json({ status: 'ok', ticket_key });
   } catch (err) { next(err); }
 });

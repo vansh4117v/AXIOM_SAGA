@@ -105,6 +105,7 @@ async function submitTicket(body) {
  */
 async function listTickets(query) {
   const { status, priority, type, search, page, limit, sort, order } = query;
+  await reconcileProcessingTickets();
 
   // Map API sort fields (snake_case) → Prisma model fields (camelCase)
   const sortFieldMap = {
@@ -217,3 +218,31 @@ async function getTicketDetail(ticketKey) {
 }
 
 module.exports = { submitTicket, listTickets, getTicketDetail };
+
+async function reconcileProcessingTickets() {
+  const staleMinutes = parseInt(process.env.PROCESSING_TIMEOUT_MINUTES || '10', 10);
+  const staleCutoff = new Date(Date.now() - staleMinutes * 60 * 1000);
+
+  await prisma.$transaction([
+    prisma.$executeRaw`
+      UPDATE tickets t
+      SET status = 'complete', processed_at = COALESCE(t.processed_at, NOW())
+      WHERE t.status = 'processing'
+        AND EXISTS (
+          SELECT 1 FROM briefings b WHERE b.ticket_key = t.ticket_key
+        )
+    `,
+    prisma.ticket.updateMany({
+      where: {
+        status: 'processing',
+        receivedAt: { lt: staleCutoff },
+      },
+      data: {
+        status: 'timeout',
+        processedAt: new Date(),
+      },
+    }),
+  ]).catch((err) => {
+    logger.error(`Processing ticket reconciliation failed: ${err.message}`);
+  });
+}

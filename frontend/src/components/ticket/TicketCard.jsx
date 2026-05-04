@@ -14,6 +14,7 @@ const STATUS_DOT = {
   processing: 'bg-accent animate-pulse-glow',
   complete:   'bg-green-500',
   failed:     'bg-red-500',
+  timeout:    'bg-red-500',
 };
 
 export default function TicketCard({ ticket, selected, onClick }) {

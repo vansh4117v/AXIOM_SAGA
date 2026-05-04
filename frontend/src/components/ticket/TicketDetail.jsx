@@ -207,6 +207,8 @@ export default function TicketDetail({ ticketKey, onAnalyse }) {
           <p className="text-xs text-sage-muted mt-1">
             {ticket.status === 'failed'
               ? 'Pipeline failed — check logs'
+              : ticket.status === 'timeout'
+                ? 'Pipeline timed out — try running analysis again'
               : 'Click "Analyse This Ticket" above to run SAGE analysis'}
           </p>
         </div>

@@ -1,4 +1,5 @@
 const { RateLimitError } = require('../errors');
+const jwt = require('jsonwebtoken');
 
 /**
  * In-memory sliding window rate limiter.
@@ -15,7 +16,7 @@ class SlidingWindowRateLimiter {
 
   middleware() {
     return (req, res, next) => {
-      const key = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+      const key = getClientKey(req);
       const now = Date.now();
       const windowStart = now - this.windowMs;
 
@@ -55,6 +56,26 @@ function createRateLimiter(opts) {
   const mw = limiter.middleware();
   mw.destroy = () => limiter.destroy();
   return mw;
+}
+
+function getClientKey(req) {
+  const token = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.split(' ')[1]
+    : null;
+  const secret = process.env.JWT_SECRET;
+
+  if (token && secret) {
+    try {
+      const decoded = jwt.verify(token, secret);
+      if (decoded.tokenType !== 'refresh' && decoded.userId) {
+        return `user:${decoded.userId}`;
+      }
+    } catch (_err) {
+      // Fall back to IP based limiting; auth middleware will handle invalid tokens.
+    }
+  }
+
+  return `ip:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`;
 }
 
 module.exports = { SlidingWindowRateLimiter, createRateLimiter };

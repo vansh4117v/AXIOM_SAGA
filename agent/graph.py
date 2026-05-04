@@ -19,6 +19,7 @@ from agents.explainer_agent import run_explainer_agent
 from agents.risk_agent import run_risk_agent
 from agents.synthesis import run_synthesis
 from db.connection import get_connection
+from gateway_client import notify_gateway
 from sse_writer import push_sse_event
 
 PIPELINE_TIMEOUT_SECONDS = 120
@@ -134,6 +135,10 @@ def run_sage_pipeline(ticket: TicketDTO, run_id: str) -> dict:
                     "UPDATE tickets SET status = 'timeout' WHERE ticket_key = %s",
                     (ticket.ticket_key,),
                 )
+        try:
+            notify_gateway(ticket.ticket_key, run_id, "timeout")
+        except Exception as callback_error:
+            print(f"[pipeline] Gateway timeout callback failed: {callback_error}")
         return initial_state
     except Exception as e:
         print(f"[pipeline] FATAL: {e}")
@@ -144,6 +149,9 @@ def run_sage_pipeline(ticket: TicketDTO, run_id: str) -> dict:
                     "UPDATE tickets SET status = 'failed' WHERE ticket_key = %s",
                     (ticket.ticket_key,),
                 )
+        try:
+            notify_gateway(ticket.ticket_key, run_id, "failed")
+        except Exception as callback_error:
+            print(f"[pipeline] Gateway failure callback failed: {callback_error}")
         raise
     return result
-

@@ -29,7 +29,7 @@ const manualSubmitSchema = z.object({
 }).strict();
 
 const ticketListQuerySchema = z.object({
-  status: z.enum(['pending', 'processing', 'complete', 'failed']).optional(),
+  status: z.enum(['pending', 'processing', 'complete', 'failed', 'timeout']).optional(),
   priority: z.string().optional(),
   type: z.string().optional(),
   search: z.string().max(200).optional(),
