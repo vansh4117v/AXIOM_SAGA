@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -49,6 +50,13 @@ def _safe_serialize(state: AgentScratchpad) -> dict:
     return safe
 
 
+def _briefing_url(run_id: str) -> str:
+    frontend_url = os.environ.get("FRONTEND_URL") or os.environ.get("SAGE_FRONTEND_URL")
+    if frontend_url:
+        return f"{frontend_url.rstrip('/')}/briefing/{run_id}"
+    return f"/briefing/{run_id}"
+
+
 def run_synthesis(state: AgentScratchpad) -> AgentScratchpad:
     started = time.monotonic()
     run_id = state["run_id"]
@@ -97,11 +105,13 @@ def run_synthesis(state: AgentScratchpad) -> AgentScratchpad:
 
     ticket_key = state["ticket_key"]
     is_real_jira_key = bool(re.match(r'^[A-Z]+-\d+$', ticket_key))
+    jira_write_succeeded = False
 
     if is_real_jira_key:
         try:
-            trace_url = f"/briefing/{run_id}"
+            trace_url = _briefing_url(run_id)
             write_comment(ticket_key, briefing, trace_url)
+            jira_write_succeeded = True
             push_sse_event(run_id, "jira_commented", {"ticket_key": ticket_key})
         except Exception as e:
             print(f"[synthesis] Jira write-back failed: {e}")
@@ -132,6 +142,7 @@ def run_synthesis(state: AgentScratchpad) -> AgentScratchpad:
             briefing=briefing,
             agent_trace=state.get("agent_trace", []),
             scratchpad=_safe_serialize(state),
+            skip_jira_write=jira_write_succeeded,
         )
     except Exception as e:
         print(f"[synthesis] Gateway callback failed: {e}")
